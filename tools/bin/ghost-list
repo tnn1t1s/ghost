@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# List Ghost CMS posts.
+#
+# Usage:
+#   ghost-list                  # All posts
+#   ghost-list drafts           # Drafts only
+#   ghost-list published        # Published only
+#   ghost-list all 50           # All posts, limit 50
+#
+# Requires: GHOST_URL, GHOST_ADMIN_API_KEY in environment or .env
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a; source "$SCRIPT_DIR/.env"; set +a
+fi
+
+: "${GHOST_URL:?GHOST_URL not set}"
+: "${GHOST_ADMIN_API_KEY:?GHOST_ADMIN_API_KEY not set}"
+
+PYTHON="${SCRIPT_DIR}/venv/bin/python"
+CLIENT="${SCRIPT_DIR}/src/ghost_client.py"
+
+STATUS="${1:-all}"
+LIMIT="${2:-15}"
+
+# Normalize "drafts" → "draft"
+[ "$STATUS" = "drafts" ] && STATUS="draft"
+
+exec "$PYTHON" "$CLIENT" list "$STATUS" "$LIMIT"

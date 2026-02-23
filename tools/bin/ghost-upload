@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Upload an image to Ghost CMS. Returns the hosted URL.
+#
+# Usage:
+#   ghost-upload photo.png
+#   ghost-upload photo.png --ref "hero-image"
+#
+# Requires: GHOST_URL, GHOST_ADMIN_API_KEY in environment or .env
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a; source "$SCRIPT_DIR/.env"; set +a
+fi
+
+: "${GHOST_URL:?GHOST_URL not set}"
+: "${GHOST_ADMIN_API_KEY:?GHOST_ADMIN_API_KEY not set}"
+
+PYTHON="${SCRIPT_DIR}/venv/bin/python"
+CLIENT="${SCRIPT_DIR}/src/ghost_client.py"
+
+FILE="${1:?Usage: ghost-upload <file> [--ref name]}"
+shift
+REF=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ref) REF="$2"; shift 2 ;;
+        *)     shift ;;
+    esac
+done
+
+exec "$PYTHON" "$CLIENT" upload-image "$FILE" "$REF"

@@ -94,6 +94,10 @@ just deploy-compose
 just restart-ghost-containers
 ```
 
+## Developing
+
+See [DEVELOPING.md](DEVELOPING.md) for submodule usage, updating workflow, and how this repo integrates with LifeResearch.
+
 ## License
 
 MIT

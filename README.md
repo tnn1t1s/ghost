@@ -1,13 +1,12 @@
 # Ghost CMS Client
 
-Publish to a self-hosted Ghost CMS from any agent or script. Python client + shell tools + Docker deployment.
+Publish to a self-hosted Ghost CMS from any agent or script. Zero dependencies — stdlib Python only.
 
 ## 30-Second Setup
 
 ```bash
 git clone git@github.com:tnn1t1s/ghost.git
 cd ghost
-just setup-venv
 cp .env.example .env
 ```
 

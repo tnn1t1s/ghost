@@ -5,7 +5,7 @@ set dotenv-load
 GCE_PROJECT := env_var("GCE_PROJECT")
 GCE_ZONE := env_var("GCE_ZONE")
 GCE_INSTANCE := env_var("GCE_INSTANCE")
-PYTHON := "venv/bin/python"
+PYTHON := "python3"
 
 default:
     @just --list
@@ -74,7 +74,3 @@ deploy-compose:
 restart-ghost-containers:
     gcloud compute ssh {{GCE_INSTANCE}} --project={{GCE_PROJECT}} --zone={{GCE_ZONE}} -- 'cd ~/ghost && sudo docker compose down && sudo docker compose up -d'
 
-# Set up Python virtual environment
-setup-venv:
-    python3 -m venv venv
-    venv/bin/pip install -r requirements.txt

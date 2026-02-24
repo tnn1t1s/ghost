@@ -1,16 +1,15 @@
+import base64
+import hashlib
+import hmac
 import json
+import mimetypes
 import os
 import sys
 import time
-from pathlib import Path
-
-import jwt
-import requests
-from dotenv import load_dotenv
+import urllib.request
+import urllib.error
 
 from ghost_api import CMSBackend
-
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 def _require_env(key: str) -> str:
@@ -34,14 +33,14 @@ class GhostClient(CMSBackend):
         self._base = f"{self.url}/ghost/api/admin"
 
     def _token(self) -> str:
+        def b64url(data: bytes) -> str:
+            return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
         now = int(time.time())
-        payload = {
-            "iat": now,
-            "exp": now + 300,
-            "aud": "/admin/",
-        }
-        return jwt.encode(payload, self._key_secret, algorithm="HS256",
-                          headers={"kid": self._key_id})
+        header = b64url(json.dumps({"alg": "HS256", "typ": "JWT", "kid": self._key_id}).encode())
+        payload = b64url(json.dumps({"iat": now, "exp": now + 300, "aud": "/admin/"}).encode())
+        sig = hmac.new(self._key_secret, f"{header}.{payload}".encode(), hashlib.sha256).digest()
+        return f"{header}.{payload}.{b64url(sig)}"
 
     def _headers(self) -> dict:
         return {
@@ -49,14 +48,17 @@ class GhostClient(CMSBackend):
             "Content-Type": "application/json",
         }
 
-    def _request(self, method: str, path: str, **kwargs) -> dict:
+    def _request(self, method: str, path: str, data: str | None = None) -> dict:
         url = f"{self._base}{path}"
-        resp = requests.request(method, url, headers=self._headers(), **kwargs)
-        if not resp.ok:
-            print(f"FATAL: {method} {path} → {resp.status_code}: {resp.text}",
-                  file=sys.stderr)
+        req = urllib.request.Request(url, method=method, headers=self._headers())
+        if data:
+            req.data = data.encode()
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            print(f"FATAL: {method} {path} → {e.code}: {e.read().decode()}", file=sys.stderr)
             sys.exit(1)
-        return resp.json()
 
     def create_post(self, title: str, html: str, status: str = "draft",
                     author_email: str = "", tags: list[str] | None = None) -> dict:
@@ -97,16 +99,29 @@ class GhostClient(CMSBackend):
 
     def upload_image(self, file_path: str, ref: str = "") -> str:
         url = f"{self._base}/images/upload/"
+        boundary = f"----ghost{int(time.time())}"
+        fname = os.path.basename(file_path)
+        ctype = mimetypes.guess_type(file_path)[0] or "application/octet-stream"
+
+        parts = []
+        if ref:
+            parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"ref\"\r\n\r\n{ref}\r\n".encode())
         with open(file_path, "rb") as f:
-            files = {"file": (os.path.basename(file_path), f, "image/png")}
-            data = {"ref": ref} if ref else {}
-            resp = requests.post(url, headers={"Authorization": f"Ghost {self._token()}"},
-                                 files=files, data=data)
-        if not resp.ok:
-            print(f"FATAL: image upload → {resp.status_code}: {resp.text}",
-                  file=sys.stderr)
+            file_data = f.read()
+        parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{fname}\"\r\nContent-Type: {ctype}\r\n\r\n".encode() + file_data + b"\r\n")
+        parts.append(f"--{boundary}--\r\n".encode())
+        body = b"".join(parts)
+
+        req = urllib.request.Request(url, method="POST", data=body, headers={
+            "Authorization": f"Ghost {self._token()}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        })
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())["images"][0]["url"]
+        except urllib.error.HTTPError as e:
+            print(f"FATAL: image upload → {e.code}: {e.read().decode()}", file=sys.stderr)
             sys.exit(1)
-        return resp.json()["images"][0]["url"]
 
 
 def _cli():
